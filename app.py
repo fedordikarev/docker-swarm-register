@@ -1,29 +1,62 @@
 #!/usr/bin/env python
 """ Listen for swarm services and register them in Consul """
 
-import docker
+import json
+import argparse
 import consul
+import docker
+
+REGISTRATOR_PREFIX = "swarm-registrator/v1/http/"
+APPSETTINGS_PREFIX = "appsettings/v1/"
+
+
+def parse_args():
+    """ Parse args """
+    parser = argparse.ArgumentParser(description='register docker service in Consul')
+    parser.add_argument('consul_url')
+    return parser.parse_args()
+
+def consul_connect(url):
+    """ Connect to Consul by giver URL """
+    if not url:
+        url = "consul://localhost:8500"
+    if not url.startswith("consul://"):
+        return None
+    url = url[len("consul://"):]
+    if ":" in url:
+        (host, port) = url.split(":", 1)
+    else:
+        (host, port) = (url, 8500)
+    return consul.Consul(host, port=port)
 
 def main():
+    """ Main loop """
     client = docker.from_env()
+    args = parse_args()
+
     for event in client.events(decode=True):
-        print(event, "\n")
+        # print(event, "\n")
         if event['Type'] != "service":
             continue
         actor = event['Actor']
         service_id = actor['ID']
         service_name = actor['Attributes']['name']
-        c = consul.Consul()
+        c = consul_connect(args.consul_url)     #pylint: disable=invalid-name
         if event['Action'] == "remove":
-            c.kv.delete('http/service/'+service_name, recurse=True)
-        elif event['Action'] == 'update':
+            print("Delete ", REGISTRATOR_PREFIX + service_name)
+            c.kv.delete(REGISTRATOR_PREFIX + service_name)
+        elif event['Action'] == 'create':
             service = client.services.get(service_id)
-            print('Service', service.attrs)
+            settings_from_consul = c.kv.get(APPSETTINGS_PREFIX + service_name)
+            if settings_from_consul[1]:
+                app_settings = json.loads(settings_from_consul[1].get('Value'))
+            else:
+                app_settings = {}
             endpoints = service.attrs['Endpoint']['Ports']
             published_ports = [x['PublishedPort'] for x in endpoints if 'PublishedPort' in x]
-            c.kv.put('http/service/{}/swarm_ports'.format(service_name), str(published_ports[0]))
-            # print([x['PublishedPort'] for x in endpoints])
-            print(endpoints)
+            app_settings['swarm_port'] = str(published_ports[0])
+            c.kv.put(REGISTRATOR_PREFIX + service_name, json.dumps(app_settings))
+            print(json.dumps(app_settings))
 
 if __name__ == "__main__":
     main()

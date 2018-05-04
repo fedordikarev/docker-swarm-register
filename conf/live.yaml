@@ -1,0 +1,5 @@
+name: "live"
+prefix: ""
+domain: "example.com"
+swarm: "tcp://swarm.example.com:2376"
+consul: "consul.exmpample.com:8500"

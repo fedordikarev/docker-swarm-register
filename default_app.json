@@ -1,0 +1,14 @@
+{
+        "deployment": {
+                "cpu_limit": "0.1",
+                "mem_limit": "256m",
+                "instances": "2"
+        },
+        "url": {
+                "server_name": "{{ service_name -}}.{{- env.domain }}"
+        },
+        "env": {
+                "SERVICE_NAME": "{{ service_name }}",
+                "SERVICE_TAGS": "swarm"
+        }
+}

@@ -82,8 +82,9 @@ def main():
         else:
             cpu_limit = None
         if 'mem_limit' in app_settings['deployment']:
-            muls = {'k': 1024, 'K': 1024, 'm': 1024*1024, 'M': 1024*1024,
-                    'g': 1024^3, 'G': 1024^3}
+            muls = {'k': 1024, 'K': 1024,
+                    'm': 1024 ** 2, 'M': 1024 ** 2,
+                    'g': 1024 ** 3, 'G': 1024 ** 3}
             mem_limit = app_settings['deployment']['mem_limit']
             if mem_limit[-1] in muls:
                 mem_limit = int(mem_limit[:-1]) * muls[mem_limit[-1]]

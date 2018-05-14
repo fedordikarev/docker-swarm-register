@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """ Deploy service to Docker Swarm or Update one if already deployed """
 
 import collections
@@ -11,7 +11,7 @@ import docker
 import jinja2
 
 KV_PREFIX = "appsettings/v1/"
-
+FS_PATH = "/local/innova/tools/inn-swarm-deploy"
 
 def dict_merge(dct, merge_dct):
     """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of
@@ -40,7 +40,7 @@ def parse_args():
 
 def read_env(name):
     """ Read environment description """
-    with open(name+".yaml", "r") as f:  #pylint: disable=invalid-name
+    with open(FS_PATH+"/conf/{}.yaml".format(name), "r") as f:  #pylint: disable=invalid-name
         return yaml.load(f)
 
 def guess_name_from_image(image_name):
@@ -63,7 +63,7 @@ def read_appsettings(filename, env, service_name):
     if filename.startswith("/"):
         loader = jinja2.FileSystemLoader('/')
     else:
-        loader = jinja2.FileSystemLoader('conf/')
+        loader = jinja2.FileSystemLoader('.')
     jinja_env = jinja2.Environment(loader=loader)
     settings_template = jinja_env.get_template(filename)
     settings = settings_template.render(service_name=service_name, env=env)
@@ -85,7 +85,8 @@ def main():
         service_name = guess_name_from_image(args.image)
         print("Guess {}".format(service_name))
 
-    app_settings = read_appsettings('default_app.json', env=env, service_name=service_name)
+    app_settings = read_appsettings(FS_PATH+'/conf/default_app.json',
+                                    env=env, service_name=service_name)
     if args.appsettings:
         dict_merge(
             app_settings,
@@ -95,12 +96,14 @@ def main():
     pprint.pprint(app_settings)
 
     print("Name: {}".format(service_name))
-    serv = d.services.list(filters={"name": "^{}$".format(service_name)})
+    try:
+        serv = d.services.get(service_name)
+    except docker.errors.NotFound:
+        serv = None
     if serv:
         print("Update service {}".format(service_name))
-        s = serv[0] #pylint: disable=invalid-name
         update_config = docker.types.UpdateConfig(order="start-first")
-        s.update(image=args.image, update_config=update_config)
+        serv.update(image=args.image, update_config=update_config)
     else:
         print("Create service {}".format(service_name))
         port = app_settings['deployment'].get("containerport", 5000)

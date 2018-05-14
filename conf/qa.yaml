@@ -1,5 +1,5 @@
 name: "qa"
 prefix: "-qa"
-domain: "qa.example.com"
-swarm: "tcp://swarm.qa.example.com:2376"
-consul: "consul.qa.example.com:8500"
+domain: "4gametest.com"
+swarm: "tcp://swarm1-q.qa.inn.ru:2376"
+consul: "consul.qa.example.com:80"

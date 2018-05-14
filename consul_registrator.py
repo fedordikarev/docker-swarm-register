@@ -54,8 +54,9 @@ def main():
                 app_settings = {}
             endpoints = service.attrs['Endpoint']['Ports']
             published_ports = [x['PublishedPort'] for x in endpoints if 'PublishedPort' in x]
-            app_settings['swarm_port'] = str(published_ports[0])
-            c.kv.put(REGISTRATOR_PREFIX + service_name, json.dumps(app_settings))
+            if published_ports:
+                app_settings['swarm_port'] = str(published_ports[0])
+                c.kv.put(REGISTRATOR_PREFIX + service_name, json.dumps(app_settings))
             print(json.dumps(app_settings))
 
 if __name__ == "__main__":

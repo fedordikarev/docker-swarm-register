@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """ Deploy service to Docker Swarm or Update one if already deployed """
 
+import collections
+import pprint
 import argparse
 import json
 import yaml
@@ -10,12 +12,29 @@ import jinja2
 
 KV_PREFIX = "appsettings/v1/"
 
+
+def dict_merge(dct, merge_dct):
+    """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of
+    updating only top-level keys, dict_merge recurses down into dicts nested
+    to an arbitrary depth, updating keys. The ``merge_dct`` is merged into
+    ``dct``.
+    :param dct: dict onto which the merge is executed
+    :param merge_dct: dct merged into dct
+    :return: None
+    """
+    for k, v in merge_dct.items():      #pylint: disable=invalid-name,unused-variable
+        if (k in dct and isinstance(dct[k], dict)
+                and isinstance(merge_dct[k], collections.Mapping)):
+            dict_merge(dct[k], merge_dct[k])
+        else:
+            dct[k] = merge_dct[k]
+
 def parse_args():
     """ Parse cli arguments """
     parser = argparse.ArgumentParser(description='deploy or update service')
     parser.add_argument("--env", help="deploy environment", default="qa")
     parser.add_argument("--name", help="service name")
-    parser.add_argument("--appsettings", help="appsettings.json file", default="default_app.json")
+    parser.add_argument("--appsettings", help="appsettings.json file")
     parser.add_argument("image", help="image", default="yahteo/swarm-docker-demo:latest")
     return parser.parse_args()
 
@@ -39,6 +58,18 @@ def consul_connect(url):
         (host, port) = (url, 8500)
     return consul.Consul(host, port=port)
 
+def read_appsettings(filename, env, service_name):
+    """ Read and render appsettings.json """
+    if filename.startswith("/"):
+        loader = jinja2.FileSystemLoader('/')
+    else:
+        loader = jinja2.FileSystemLoader('conf/')
+    jinja_env = jinja2.Environment(loader=loader)
+    settings_template = jinja_env.get_template(filename)
+    settings = settings_template.render(service_name=service_name, env=env)
+    app_settings = json.loads(settings)
+    return app_settings
+
 def main():
     """ Main action """
     #TODO: Refactor this function later
@@ -54,14 +85,17 @@ def main():
         service_name = guess_name_from_image(args.image)
         print("Guess {}".format(service_name))
 
-    loader = jinja2.FileSystemLoader('conf/')
-    jinja_env = jinja2.Environment(loader=loader)
-    settings_template = jinja_env.get_template(args.appsettings)
-    settings = settings_template.render(service_name=service_name, env=env)
-    app_settings = json.loads(settings)
+    app_settings = read_appsettings('default_app.json', env=env, service_name=service_name)
+    if args.appsettings:
+        dict_merge(
+            app_settings,
+            read_appsettings(args.appsettings, env=env, service_name=service_name)
+            )
+
+    pprint.pprint(app_settings)
 
     print("Name: {}".format(service_name))
-    serv = d.services.list(filters={"name": service_name})
+    serv = d.services.list(filters={"name": "^{}$".format(service_name)})
     if serv:
         print("Update service {}".format(service_name))
         s = serv[0] #pylint: disable=invalid-name
@@ -102,7 +136,8 @@ def main():
             endpoint_spec=endports,
             env=app_settings['env'],
             mode=replica_mode,
-            resources=resources
+            resources=resources,
+            mounts=app_settings.get("volumes", [])
             )
 
 if __name__ == "__main__":

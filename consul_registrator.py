@@ -35,9 +35,9 @@ def main():
     args = parse_args()
 
     for event in client.events(decode=True):
-        # print(event, "\n")
         if event['Type'] != "service":
             continue
+        print("DEBUG event:", event, "\n")
         actor = event['Actor']
         service_id = actor['ID']
         service_name = actor['Attributes']['name']
@@ -45,7 +45,7 @@ def main():
         if event['Action'] == "remove":
             print("Delete ", REGISTRATOR_PREFIX + service_name)
             c.kv.delete(REGISTRATOR_PREFIX + service_name)
-        elif event['Action'] == 'create':
+        elif event['Action'] in ('create', 'update'):
             service = client.services.get(service_id)
             settings_from_consul = c.kv.get(APPSETTINGS_PREFIX + service_name)
             if settings_from_consul[1]:

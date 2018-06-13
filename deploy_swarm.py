@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--env", help="deploy environment", default="qa")
     parser.add_argument("--name", help="service name")
     parser.add_argument("--appsettings", help="appsettings.json file")
+    parser.add_argument("--appsettings_json", help="appsettings json value")
     parser.add_argument("image", help="image", default="yahteo/swarm-docker-demo:latest")
     return parser.parse_args()
 
@@ -70,6 +71,11 @@ def read_appsettings(filename, env, service_name):
     app_settings = json.loads(settings)
     return app_settings
 
+def read_appsettings_json(value, env, service_name):
+    template = jinja2.Template(value)
+    app_settings = json.loads(template.render(service_name=service_name, env=env))
+    return app_settings
+
 def main():
     """ Main action """
     #TODO: Refactor this function later
@@ -91,6 +97,11 @@ def main():
         dict_merge(
             app_settings,
             read_appsettings(args.appsettings, env=env, service_name=service_name)
+            )
+    if args.appsettings_json:
+        dict_merge(
+            app_settings,
+            read_appsettings_json(args.appsettings_json, env=env, service_name=service_name)
             )
 
     pprint.pprint(app_settings)

@@ -7,6 +7,7 @@ import consul
 import docker
 
 REGISTRATOR_PREFIX = "swarm-registrator/v1/http/"
+REGISTRATOR_TCP_PREFIX = "swarm-registrator/v1/tcp/"
 APPSETTINGS_PREFIX = "appsettings/v1/"
 
 
@@ -37,7 +38,6 @@ def main():
     for event in client.events(decode=True):
         if event['Type'] != "service":
             continue
-        print("DEBUG event:", event, "\n")
         actor = event['Actor']
         service_id = actor['ID']
         service_name = actor['Attributes']['name']
@@ -53,13 +53,29 @@ def main():
             else:
                 app_settings = {}
             endpoints = service.attrs.get('Endpoint', {}).get('Ports', [])
-            published_ports = [x['PublishedPort'] for x in endpoints if 'PublishedPort' in x]
-            if published_ports:
-                app_settings['swarm_port'] = str(published_ports[0])
-                c.kv.put(REGISTRATOR_PREFIX + service_name, json.dumps(app_settings))
+            if endpoints:
+                http_port = int(app_settings.get("http_port", endpoints[0]["TargetPort"]))
+                tcp_ports = []
+                swarm_http_port = None
+                for endpoint in endpoints:
+                    if endpoint["TargetPort"] == http_port:
+                        swarm_http_port = endpoint.get("PublishedPort")
+                    elif endpoint.get("PublishedPort"):
+                        tcp_ports.append({endpoint.get("PublishedPort"): endpoint.get("TargetPort")})
+
+                if swarm_http_port:
+                    app_settings['swarm_port'] = str(swarm_http_port)
+                    c.kv.put(REGISTRATOR_PREFIX + service_name, json.dumps(app_settings))
+                else:
+                    print(service_name, "created but no HTTP PublishedPorts found")
+
+                if tcp_ports:
+                    c.kv.put(REGISTRATOR_TCP_PREFIX + service_name, json.dumps(tcp_ports))
+                else:
+                    c.kv.delete(REGISTRATOR_TCP_PREFIX + service_name)
             else:
-                print(service_name, "created but no PublishedPorts found")
-            print(json.dumps(app_settings))
+                print(service_name, "no endpoints found")
+
 
 if __name__ == "__main__":
     main()
